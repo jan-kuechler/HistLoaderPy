@@ -28,5 +28,6 @@ range(5) deltaPhi: angle, massRange
 	xtitle: #Delta#phi
 	
 massTTbar: mass
-	title:	TTbar Masse
+	title: t#bar{t} Masse
+	$what: t#bart
 	

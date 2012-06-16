@@ -1,6 +1,6 @@
 from ROOT import *
 
-def _startHist(line):
+def _handleFirstLine(line):
 	h = {}
 	if line.startswith("template "):
 		h["*is-template*"] = True
@@ -36,10 +36,9 @@ def _loadValue(val):
 	for v in val[1:-1].split(";"):
 		vals.append(v.strip())
 		
-	#print "loaded list:", vals	
 	return vals
 
-def _addDef(hist, line):
+def _handleTabLine(hist, line):
 	if line.find(":") != -1:
 		parts = line.split(":")
 		hist[parts[0].strip()] = _loadValue(parts[1].strip())
@@ -48,26 +47,26 @@ def _addDef(hist, line):
 
 def _gatherTemplates(hists):
 	tpls = {}
-	for n, d in hists.iteritems():
-		if "*is-template*" in d:
-			tpls[n] = d
+	for n, defs in hists.iteritems():
+		if "*is-template*" in defs:
+			tpls[n] = defs
 	return tpls
 
-def _resolve(tpls, d):
-	if not "*inherits*" in d:
+def _resolve(tpls, defs):
+	if not "*inherits*" in defs:
 		return
 		
-	for parent in d["*inherits*"]:
+	for parent in defs["*inherits*"]:
 		if not parent in tpls:
 			print "Error: Could not find template " + parent
 			return
 
 		t = tpls[parent]
 		for k, v in t.iteritems():
-			if not k.startswith("*") and not k in d:
-				d[k] = v
+			if not k.startswith("*") and not k in defs:
+				defs[k] = v
 	
-	del d["*inherits*"]
+	del defs["*inherits*"]
 
 def _resolveTemplates(hists):
 	tpls = _gatherTemplates(hists)
@@ -92,39 +91,52 @@ def _loadDefinitions(fileName):
 		if line[0:1] == "\t":
 			if curHist == None:
 				return False, "Syntax error in line " + str(ln)
-			_addDef(curHist, line.strip())
+			_handleTabLine(curHist, line.strip())
 		else:
 			if curHist:
 				hists[curHist["name"]] = curHist
-			curHist = _startHist(line.strip())
+			curHist = _handleFirstLine(line.strip())
 			
 	hists[curHist["name"]] = curHist	
 			
 	return _resolveTemplates(hists)
-
-def _checkTH1F(d):
-	if not "nbins" in d:
-		return False, "'nbins' missing"
-	if not "min" in d:
-		return False, "'min' missing"
-	if not "max" in d:
-		return False, "'max' missing"
+	
+def _binWidthToNBins(binwidth, min, max):
+	return math.floor(abs(max - min) / binwidth)
+	
+def _checkAxis(defs, axis):
+	min = "min" + axis
+	max = "max" + axis
+	nbins = "nbins" + axis
+	binwidth = "binwidth" + axis
+	
+	if not min in defs:
+		return False, "'" + min + "' missing"
+	if not max in defs:
+		return False, "'" + max + "' missing"
+		
+	if not nbins in defs:
+		if binwidth in defs:
+			defs[nbins] = _binWidthToNBins(defs[binwidth], defs[min], defs[max])
+		else:
+			return False, "'" + nbins + "' missing"
+		
 	return True, None
 
-def _loadTH1F(d):
-	ok, msg = _checkTH1F(d)
+def _loadTH1F(defs):
+	ok, msg = _checkAxis(defs, "")
 	if not ok:
-		print "Error in histogram '" + d["name"] + ": " + msg
+		print "Error in histogram '" + defs["name"] + ": " + msg
 		return None
 	
-	title = d["title"] if "title" in d else d["name"]
+	title = defs["title"] if "title" in defs else defs["name"]
 
-	hist = TH1F(d["name"], title, int(d["nbins"]), float(d["min"]), float(d["max"]))
+	hist = TH1F(defs["name"], title, int(defs["nbins"]), float(defs["min"]), float(defs["max"]))
 	
-	if "xtitle" in d:
-		hist.GetXaxis().SetTitle(d["xtitle"])
-	if "ytitle" in d:
-		hist.GetYaxis().SetTitle(d["ytitle"])		
+	if "xtitle" in defs:
+		hist.GetXaxis().SetTitle(defs["xtitle"])
+	if "ytitle" in defs:
+		hist.GetYaxis().SetTitle(defs["ytitle"])		
 	
 	return hist
 	
@@ -132,10 +144,10 @@ _loaders = {
 	"TH1F": _loadTH1F
 }
 
-def _handleVariables(d, i):
-	result = d.copy()
+def _handleVariables(defs, i):
+	result = defs.copy()
 
-	for key, val in d.iteritems():
+	for key, val in defs.iteritems():
 		if not type(val) is str:
 			continue
 
@@ -150,54 +162,52 @@ def _handleVariables(d, i):
 			else:
 				name = val[pos:end]
 			
-			print name
-			
 			var = None
-			if name in d:
-				if type(d[name]) is list:
-					var = d[name][i]
+			if name in defs:
+				if type(defs[name]) is list:
+					var = defs[name][i]
 				else:
-					var = d[name]
+					var = defs[name]
+			else:
+				print "No " + name
 			
-			if name and var:
-				print name, var
+			if name and (var != None):
 				result[key] = result[key].replace(name, var)
 			
 			pos = val.find("$", end)
 	
-	#print result
 	return result
 
-def _handleRange(d):
-	if not "*is-range*" in d:
-		return d
+def _handleRange(defs):
+	if not "*is-range*" in defs:
+		return defs
 	
-	count = d["*count*"]
+	count = defs["*count*"]
 	res = []
 	for i in range(count):
-		x = d.copy()
+		x = defs.copy()
 		x["name"] += str(i)
 		res.append(_handleVariables(x, i))
 	
 	return res
 
-def LoadHist(d):
+def LoadHist(defs):
 	type = "TH1F"
-	if "type" in d:
-		type = d["type"]
+	if "type" in defs:
+		type = defs["type"]
 		
 	if not type in _loaders:
 		print "Error: Unknown histogram type " + type
 		
-	if "*is-range*" in d:
-		ds = _handleRange(d)
+	if "*is-range*" in defs:
+		defrange = _handleRange(defs)
 		hists = []
-		for x in ds:
-			hists.append(_loaders[type](x))
+		for d in defrange:
+			hists.append(_loaders[type](d))
 		return hists
 	else:
-		d = _handleVariables(d, 0)
-		return _loaders[type](d)
+		defs = _handleVariables(defs, 0)
+		return _loaders[type](defs)
 
 def LoadHistogramsFromFile(fileName):
 	hists = _loadDefinitions(fileName)
@@ -208,4 +218,3 @@ def LoadHistogramsFromFile(fileName):
 			loaded[n] = LoadHist(d)
 	
 	return loaded
-
