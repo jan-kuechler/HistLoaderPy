@@ -27,11 +27,22 @@ def _startHist(line):
 		h["name"] = line
 	
 	return h
+
+def _loadValue(val):
+	if not (val.startswith("[") and val.endswith("]")):
+		return val
 	
+	vals = []
+	for v in val[1:-1].split(";"):
+		vals.append(v.strip())
+		
+	#print "loaded list:", vals	
+	return vals
+
 def _addDef(hist, line):
 	if line.find(":") != -1:
 		parts = line.split(":")
-		hist[parts[0].strip()] = parts[1].strip()
+		hist[parts[0].strip()] = _loadValue(parts[1].strip())
 	else:
 		hist[line] = True
 
@@ -121,6 +132,55 @@ _loaders = {
 	"TH1F": _loadTH1F
 }
 
+def _handleVariables(d, i):
+	result = d.copy()
+
+	for key, val in d.iteritems():
+		if not type(val) is str:
+			continue
+
+		# replace all occurences of $name with their values
+		start = 0
+		pos = val.find("$")
+		while pos != -1:
+			end = val.find(" ", pos)
+			name = None
+			if end == -1:
+				name = val[pos:]
+			else:
+				name = val[pos:end]
+			
+			print name
+			
+			var = None
+			if name in d:
+				if type(d[name]) is list:
+					var = d[name][i]
+				else:
+					var = d[name]
+			
+			if name and var:
+				print name, var
+				result[key] = result[key].replace(name, var)
+			
+			pos = val.find("$", end)
+	
+	#print result
+	return result
+
+def _handleRange(d):
+	if not "*is-range*" in d:
+		return d
+	
+	count = d["*count*"]
+	res = []
+	for i in range(count):
+		x = d.copy()
+		x["name"] += str(i)
+		res.append(_handleVariables(x, i))
+	
+	return res
+
 def LoadHist(d):
 	type = "TH1F"
 	if "type" in d:
@@ -129,7 +189,15 @@ def LoadHist(d):
 	if not type in _loaders:
 		print "Error: Unknown histogram type " + type
 		
-	return _loaders[type](d)
+	if "*is-range*" in d:
+		ds = _handleRange(d)
+		hists = []
+		for x in ds:
+			hists.append(_loaders[type](x))
+		return hists
+	else:
+		d = _handleVariables(d, 0)
+		return _loaders[type](d)
 
 def LoadHistogramsFromFile(fileName):
 	hists = _loadDefinitions(fileName)
@@ -140,3 +208,4 @@ def LoadHistogramsFromFile(fileName):
 			loaded[n] = LoadHist(d)
 	
 	return loaded
+

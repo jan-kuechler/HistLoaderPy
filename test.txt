@@ -2,6 +2,14 @@ template angle
 	nbins: 	50
 	min:	-4
 	max:	 4
+	
+template mass
+	nbins:	100
+	min:	0
+	max:	500
+	$what:	
+	xtitle:	M_{$what } [GeV]
+	ytitle: events
 
 template cosAngle: angle
 	min:	-1
@@ -13,9 +21,12 @@ cosTheta: cosAngle
 	ytitle: entries
 	
 template massRange
-	$name: [A; B; C; D; E]
+	$mr: [A; B; C; D; E]
 	
 range(5) deltaPhi: angle, massRange
-	title: #Delta#phi in mass range $name
+	title: #Delta#phi in mass range $mr
 	xtitle: #Delta#phi
+	
+massTTbar: mass
+	title:	TTbar Masse
 	
