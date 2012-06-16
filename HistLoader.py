@@ -75,7 +75,7 @@ def _resolveTemplates(hists):
 		_resolve(tpls, d)
 	
 	return hists
-	
+
 def _loadDefinitions(fileName):
 	f = open(fileName, 'r')
 	
@@ -100,10 +100,10 @@ def _loadDefinitions(fileName):
 	hists[curHist["name"]] = curHist	
 			
 	return _resolveTemplates(hists)
-	
+
 def _binWidthToNBins(binwidth, min, max):
 	return math.floor(abs(max - min) / binwidth)
-	
+
 def _checkAxis(defs, axis):
 	min = "min" + axis
 	max = "max" + axis
