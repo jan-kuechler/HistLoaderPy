@@ -218,3 +218,17 @@ def LoadHistogramsFromFile(fileName):
 			loaded[n] = LoadHist(d)
 	
 	return loaded
+
+def LoadHistogramDefsFromFile(fileName):
+	hists = _loadDefinitions(fileName)
+
+	result = {}
+	for name, defs in hists.iteritems():
+		if "*is-range*" in defs:
+			result[name] = _handleRange(defs)
+		else:
+			result[name] = _handleVariables(defs, 0)
+
+	return result
+
+
